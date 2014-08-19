@@ -1,0 +1,97 @@
+# Machine Learning - Barbell
+
+### Import the data and packages 
+assumes Caret package is already installed and data files are in current working directory
+
+```{r}
+#Import data file, converting all NA like values to NA
+data <- read.csv("pml-training.csv", na.strings=c("NA", "N/A","-", "", "NAN", "Inf", "Div/0", "#DIV/0!"))
+
+#Open Caret package
+library(caret)
+```
+
+### Split into training and testing
+```{r}
+set.seed(1999)
+train<-createDataPartition (data$classe, p=.6, list=FALSE)
+training <- data[train,]
+testing <- data[-train,]
+```
+
+
+### Select variables
+Remove variabes that are inappropriate (subject name, date of event) and/or unuseful (variables with more than 50% NA values)
+```{r}
+#Remove username and timestamp columns
+training <- training [,-(1:7)]
+testing <- testing [,-(1:7)]
+
+#Find and keep columns with less than 50% NA
+na_50_less <- sapply(training, function(x){percent_na <- sum(is.na(x)) / length(x); percent_na<0.5})
+training <- training [,na_50_less]
+testing <- testing [,na_50_less]
+```
+
+
+### Preprocess data with PCA
+```{r}
+training_pca <- preProcess(training[,-ncol(training)], method="pca")
+
+training_pca_pred <- predict(training_pca, training[,-ncol(training)])
+testing_pca_pred <- predict(training_pca, testing[,-ncol(testing)])
+```
+
+### Train Random forest model
+```{r, cache = TRUE}
+train_control = trainControl(method = "cv", number=5)
+set.seed(42)
+model_rf <- train(training$classe~., method="rf", data=training_pca_pred, trControl=train_control)
+
+# See results
+model_rf$finalModel
+```
+
+NOTE: Cross-validation is performed automatically by the Random Forest training method above. 
+
+The estimate out of bag error rate is XXXXX. Below we will test the model on the testing set to get a better ide of the out of bag error
+
+### Predict on my testing set
+```{r}
+#predict on my testing set
+pred_test <- predict(model_rf, testing_pca_pred)
+
+#output confusion matrix to see how model fared
+confusionMatrix(pred_test, testing$classe)
+```
+
+As you can see the accuracy is XXXX and so the out of bag error rate is XXXXX (1-XXXXX).
+
+```{r, echo=FALSE}
+#Import the 20 assignment test cases
+assignment_20 <- read.csv("pml-testing.csv")
+
+#Remove username and timestamp columns
+assignment_20 <- assignment_20 [,-(1:7)]
+
+#Keep columns with less than 50% NA
+assignment_20 <- assignment_20 [,na_50_less]
+
+#Preprocess data with PCA
+assignment_20_pca_pred <- predict(training_pca, assignment_20[,-ncol(assignment_20)])
+
+#Predict on 20 assignment test cases
+pred_assignment_20 <- predict(model_rf, assignment_20_pca_pred)
+
+pml_write_files = function(x){
+  n = length(x)
+  for(i in 1:n){
+    filename = paste0("problem_id_",i,".txt")
+    write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+  }
+}
+
+pml_write_files(pred_assignment_20)
+```
+
+constrain the text of the writeup to < 2000 words and the number of figures to be less than 5
